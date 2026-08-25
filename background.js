@@ -127,16 +127,22 @@ async function checkDrift() {
       : `${Math.round(minutesOnDomain)} min on ${domain}. Intentional?`;
   }
 
-  chrome.notifications.create(`nudge-${Date.now()}`, {
+  const notifId = `nudge-${Date.now()}`;
+  chrome.notifications.create(notifId, {
     type: 'basic',
     iconUrl: 'icons/icon128.png',
     title,
     message,
+    buttons: [
+      { title: 'Back on track' },
+      { title: 'It\'s related' },
+    ],
     priority: isBlocked ? 2 : 1,
-    requireInteraction: isBlocked,
+    requireInteraction: true,
   });
 
   state.lastNudgeTime = Date.now();
+  state.lastNudgeDomain = domain;
 
   try {
     await chrome.storage.local.set({
@@ -144,6 +150,19 @@ async function checkDrift() {
     });
   } catch {}
 }
+
+chrome.notifications.onButtonClicked.addListener(async (notifId, btnIndex) => {
+  if (btnIndex === 0) {
+    const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (tabs[0]) await chrome.tabs.remove(tabs[0].id);
+    state.currentDomain = null;
+    state.domainStartTime = null;
+  } else {
+    state.domainStartTime = Date.now();
+    state.lastNudgeTime = Date.now();
+  }
+  chrome.notifications.clear(notifId);
+});
 
 chrome.alarms.create('drift-check', { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener((alarm) => {
