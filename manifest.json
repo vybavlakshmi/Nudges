@@ -1,22 +1,31 @@
 {
   "manifest_version": 3,
   "name": "Nudges — Maya Drift Detector",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Catches silent browser drift and nudges you back to your active commitment",
   "permissions": [
     "tabs",
-    "notifications",
     "alarms",
     "idle",
     "storage",
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
   "host_permissions": [
-    "https://my-day-lovat.vercel.app/*"
+    "https://my-day-lovat.vercel.app/*",
+    "https://*/*",
+    "http://*/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

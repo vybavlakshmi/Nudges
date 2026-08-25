@@ -127,19 +127,28 @@ async function checkDrift() {
       : `${Math.round(minutesOnDomain)} min on ${domain}. Intentional?`;
   }
 
-  const notifId = `nudge-${Date.now()}`;
-  chrome.notifications.create(notifId, {
-    type: 'basic',
-    iconUrl: 'icons/icon128.png',
-    title,
-    message,
-    buttons: [
-      { title: 'Back on track' },
-      { title: 'It\'s related' },
-    ],
-    priority: isBlocked ? 2 : 1,
-    requireInteraction: true,
-  });
+  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (activeTab && activeTab.id) {
+    try {
+      await chrome.tabs.sendMessage(activeTab.id, {
+        type: 'show-nudge',
+        title,
+        message,
+        isBlocked,
+      });
+    } catch {
+      await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        files: ['content.js'],
+      }).catch(() => {});
+      await chrome.tabs.sendMessage(activeTab.id, {
+        type: 'show-nudge',
+        title,
+        message,
+        isBlocked,
+      }).catch(() => {});
+    }
+  }
 
   state.lastNudgeTime = Date.now();
   state.lastNudgeDomain = domain;
@@ -151,17 +160,18 @@ async function checkDrift() {
   } catch {}
 }
 
-chrome.notifications.onButtonClicked.addListener(async (notifId, btnIndex) => {
-  if (btnIndex === 0) {
-    const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    if (tabs[0]) await chrome.tabs.remove(tabs[0].id);
-    state.currentDomain = null;
-    state.domainStartTime = null;
-  } else {
-    state.domainStartTime = Date.now();
-    state.lastNudgeTime = Date.now();
+chrome.runtime.onMessage.addListener(async (msg) => {
+  if (msg.type === 'nudge-response') {
+    if (msg.action === 'back') {
+      const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      if (tabs[0]) await chrome.tabs.remove(tabs[0].id);
+      state.currentDomain = null;
+      state.domainStartTime = null;
+    } else if (msg.action === 'related') {
+      state.domainStartTime = Date.now();
+      state.lastNudgeTime = Date.now();
+    }
   }
-  chrome.notifications.clear(notifId);
 });
 
 chrome.alarms.create('drift-check', { periodInMinutes: 0.5 });
